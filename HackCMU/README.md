@@ -37,24 +37,35 @@ check in → Redeem a dining block → Explore for the digest.
 
 ## Turning on the live digest
 
-The weekly digest in Explore runs through `AISummaryService`. `SampleSummaryService`
-ships enabled and returns one of three written digests after a short delay.
+Explore uses the local, data-derived recap by default (no network or downloaded
+language model). This demo calls `https://api.ifm.ai/v1/chat/completions` with Bearer
+authentication and model `IFM/K2-Horizon-375B-A23B`, per the supplied IFM example.
 
-To generate against a real model, add `ANTHROPIC_API_KEY` or `XAI_API_KEY` to
-Info.plist and change one line in `App/KarmaApp.swift`:
+The prompt lives in `Services/IFMSummaryService.swift`. Each generation receives
+the latest rolling seven-day snapshot: up to 30 newest **public** recognitions
+(including recipient Andrew IDs) and 10 newest past events. Private notes are
+never sent. Sign-ups are explicitly distinguished from verified attendance.
+The prompt asks for a short headline, three evidence-grounded paragraphs and
+optional peer/organizer spotlights. Returned spotlight identifiers are checked
+against the snapshot before display. Free-text input is treated as data, not
+instructions. This is still demo data from the in-memory store, not a live CMU feed.
 
-```swift
-private let summaries: AISummaryService = AnthropicSummaryService()
-// or:
-private let summaries: AISummaryService = XAISummaryService()
-```
+Explore loads a recap when its snapshot changes, on pull-to-refresh, or using the
+refresh icon. Successful IFM recaps are stored in UserDefaults by date-range
+string and reused for that range, including after relaunch and with IFM disabled.
+These are saved snapshots: changes within a cached range do not regenerate it.
+The newest 14 generated ranges are retained; local fallbacks are never cached.
+Corrupt cache data is ignored. No API credentials are stored in the recap cache.
+The card always shows `Powered by IFM` branding with a sparkles icon, with a tiny
+`Cached` badge for saved IFM output or a `Local recap` source label for local text. Missing
+keys, network errors, denied access, rate limits and invalid responses produce a
+data-derived `Local recap` with an explanatory notice, never a fake AI success.
+No API keys or provider response bodies are logged. Live requests need a valid
+key and model access; offline checks do not establish provider availability.
 
-Any failure — missing key, no network, malformed JSON — degrades silently to the
-sample digest, so the demo can't break on stage. The badge on the card tells you
-which one you're looking at, and names the provider once it's live.
-
-An API key inside a shipped client is extractable by anyone who downloads it. In
-production this call belongs behind your own backend.
+An API key inside a shipped client is extractable. This placeholder is for local
+demos only; production calls belong behind your authenticated backend, which
+holds the key and enforces privacy, quotas and abuse controls.
 
 ## Voice
 
@@ -72,16 +83,22 @@ today rather than doing nothing without a key:
 - **"Say why" dictate / read back** (on the Give Karma sheet) talks to
   ElevenLabs directly — `ElevenLabsDictationService` for speech-to-text and
   `ElevenLabsSpeechService` for text-to-speech, both in
-  `Services/ElevenLabsService.swift`. Add `ELEVENLABS_API_KEY` to Info.plist
-  to turn them on. Read-back falls back to the on-device voice with no key;
-  dictation has no on-device equivalent, so it surfaces a toast asking for a
-  key instead of failing silently.
+  `Services/ElevenLabsService.swift`. Paste a demo key into
+  `Services/ElevenLabsConfiguration.swift` (or set `ELEVENLABS_API_KEY` in Info.plist)
+  and rebuild. Dictate → allow microphone → speak → Stop & transcribe uses
+  `scribe_v2` and inserts editable text without changing the karma amount.
+  Audio is sent to ElevenLabs; temporary local recordings are deleted after the
+  request, on failure, or cancellation. Dismissing the sheet cancels dictation.
+  Read-back falls back to the on-device voice with no key; dictation shows a
+  configuration message and typing remains available.
 
-## What's mocked
+Tone-based amount suggestions are deliberately not enabled. Scribe's documented
+[transcription API](https://elevenlabs.io/docs/api-reference/speech-to-text/convert)
+offers sound-event tagging, not an excitement score. ElevenAgents
+[Expressive mode](https://elevenlabs.io/docs/eleven-agents/customization/voice/expressive-mode)
+is a different conversational-agent integration. Laughter, loudness, or enthusiastic
+words alone are not treated as evidence that the speaker wants to give more karma.
 
-Everything. `Store/MockData.swift` holds 14 students, 22 grants, 9 events and 9
-redemption options. State lives in memory and resets on launch — there is no
-persistence layer and nothing to reset between demo runs.
 
 ## Swift 6
 
@@ -90,15 +107,3 @@ injected with `.environment(_:)` and read with `@Environment(LocationManager.sel
 This matters under Swift 6, where `import SwiftUI` no longer exposes
 `ObservableObject` and `@Published` transitively — code using them needs an
 explicit `import Combine`.
-
-## Two things worth knowing
-
-**The zoom transition is iOS 18+.** Event card → detail uses
-`.navigationTransition(.zoom(sourceID:in:))`, gated behind `#available`. On
-iOS 17 you get a standard push. `matchedGeometryEffect` can't cross a
-navigation boundary, and the workarounds all cost scroll position.
-
-**Proximity check-in is enforced at 150 m** — but only when a location fix
-exists. If permission is denied or there's no fix, the radius isn't applied and
-check-in falls back to the event's time window, so a denied prompt never
-dead-ends the flow.

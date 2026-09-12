@@ -7,6 +7,7 @@ struct ExploreView: View {
     @State private var digest: WeeklyDigest?
     @State private var isLoading = true
     @State private var selectedPerson: Student?
+    @State private var loadID = UUID()
 
     var body: some View {
         NavigationStack {
@@ -39,8 +40,7 @@ struct ExploreView: View {
                 ProfileView(student: person)
             }
         }
-        .task {
-            guard digest == nil else { return }
+        .task(id: store.digestContext()) {
             await load()
         }
     }
@@ -50,8 +50,11 @@ struct ExploreView: View {
     }
 
     private func load() async {
+        let requestID = UUID()
+        loadID = requestID
         withAnimation(.easeOut(duration: 0.2)) { isLoading = true }
         let result = try? await summaries.weeklyDigest(store.digestContext())
+        guard !Task.isCancelled, requestID == loadID else { return }
         withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) {
             digest = result
             isLoading = false

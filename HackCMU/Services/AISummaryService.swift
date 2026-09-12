@@ -4,22 +4,30 @@ protocol AISummaryService {
     func weeklyDigest(_ context: DigestContext) async throws -> WeeklyDigest
 }
 
-/// Ships enabled. The delay exists so the loading state is actually visible
-/// during a demo rather than flashing past.
+/// Offline recap computed from the same live activity snapshot as the AI recap.
 struct SampleSummaryService: AISummaryService {
     func weeklyDigest(_ context: DigestContext) async throws -> WeeklyDigest {
         try await Task.sleep(for: .milliseconds(1200))
 
         let total = context.grants.reduce(0) { $0 + $1.amount }
-        let recipients = Set(context.grants.map(\.to)).count
-        let teaching = context.grants.filter { $0.category == "teaching" }.count
+        let recipients = Set(context.grants.map(\.toAndrewID)).count
+        let categories = Dictionary(grouping: context.grants, by: \.category)
+        let top = categories.keys.sorted {
+            let left = categories[$0]!.count, right = categories[$1]!.count
+            return left == right ? $0 < $1 : left > right
+        }.first
+        let labels = ["teaching": "learning support", "debugging": "help getting unstuck",
+                      "lifting": "teamwork", "organizing": "organizing", "kindness": "everyday kindness"]
+        let pattern = top.map {
+            "\(categories[$0]!.count) public notes recognized \(labels[$0] ?? $0), the most represented category in this snapshot."
+        } ?? "There are no public recognition notes in this seven-day window yet."
         let attendance = context.events.reduce(0) { $0 + $1.attending }
         return WeeklyDigest(
             headline: "Small acts of support across campus",
             body: [
-                "\(context.grants.count) recognitions shared \(total) karma with \(recipients) students this week.",
-                "\(teaching) notes recognized teaching and study support. Other students thanked peers for project feedback, event setup, and everyday help.",
-                "\(context.events.count) recent campus sessions recorded \(attendance) attendances. These include reading groups and student service activities."
+                "This week's snapshot includes \(context.grants.count) public recognitions sharing \(total) karma with \(recipients) students.",
+                pattern,
+                context.events.isEmpty ? "No past campus events are included in this window yet." : "\(context.events.count) past campus events recorded \(attendance) sign-ups in this snapshot. Sign-ups do not confirm attendance or represent unique students."
             ],
             mostHelpfulAndrewID: nil, mostHelpfulNote: nil,
             topOrganizer: nil, topOrganizerNote: nil,
@@ -213,7 +221,7 @@ struct XAISummaryService: AISummaryService {
 }
 
 private struct SummaryServiceKey: EnvironmentKey {
-    static let defaultValue: AISummaryService = SampleSummaryService()
+    static let defaultValue: AISummaryService = IFMConfiguration.summaryService()
 }
 
 extension EnvironmentValues {

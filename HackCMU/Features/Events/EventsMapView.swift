@@ -5,15 +5,16 @@ import MapKit
 struct EventsMapView: View {
     @Environment(KarmaStore.self) private var store
     @Environment(LocationManager.self) private var locations
+    @Environment(\.scenePhase) private var scenePhase
 
     @Binding var selectedVenue: Venue?
 
-    @State private var camera: MapCameraPosition = .region(
+    @State private var camera: MapCameraPosition = .userLocation(followsHeading: false, fallback: .region(
         MKCoordinateRegion(
             center: CLLocationCoordinate2D(latitude: 40.4433, longitude: -79.9436),
             span: MKCoordinateSpan(latitudeDelta: 0.006, longitudeDelta: 0.006)
         )
-    )
+    ))
 
     var body: some View {
         Map(position: $camera) {
@@ -46,12 +47,16 @@ struct EventsMapView: View {
             MapCompass()
         }
         .mapStyle(.standard(elevation: .flat, pointsOfInterest: .excludingAll))
+        .tint(.blue)
         .overlay(alignment: .top) {
             if locations.isDenied {
                 permissionBanner
             }
         }
         .onAppear { locations.requestIfNeeded() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { locations.requestIfNeeded() }
+        }
         .onDisappear { locations.stop() }
     }
 

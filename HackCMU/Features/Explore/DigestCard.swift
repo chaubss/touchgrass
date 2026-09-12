@@ -47,18 +47,12 @@ struct DigestCard: View {
                     .font(.uiCaption)
                     .foregroundStyle(Palette.ash)
                 Spacer()
-                Text(digest.source == .live ? "Live digest · Powered by \(digest.provider)" : "Sample digest")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Palette.ash)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(Palette.rule.opacity(0.6)))
                 Button(action: { toggleSpeech(digest) }) {
                     Image(systemName: isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Palette.tartan)
                 }
-                .accessibilityLabel(isSpeaking ? "Stop reading" : "Read digest aloud, powered by xAI")
+                .accessibilityLabel(isSpeaking ? "Stop reading" : "Read digest aloud")
                 Button(action: {
                     voice.stop()
                     isSpeaking = false
@@ -66,8 +60,37 @@ struct DigestCard: View {
                 }) {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Palette.tartan)
+                    .foregroundStyle(Palette.tartan)
                 }
+                .accessibilityLabel("Regenerate recap")
+            }
+
+            HStack(spacing: 6) {
+                Label("Powered by IFM", systemImage: "sparkles")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Palette.tartan)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Palette.rule.opacity(0.6)))
+                if digest.isCached {
+                    Text("Cached")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(Palette.ash)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().stroke(Palette.rule, lineWidth: 1))
+                        .accessibilityLabel("Saved IFM recap, generated \(digest.generatedAt.formatted(date: .abbreviated, time: .shortened))")
+                } else if digest.source == .sample {
+                    Text("Local recap")
+                        .font(.system(size: 9))
+                        .foregroundStyle(Palette.ash)
+                }
+            }
+
+            if let notice = digest.notice {
+                Text(notice)
+                    .font(.uiCaption)
+                    .foregroundStyle(Palette.ash)
             }
 
             Text(digest.headline)
@@ -88,14 +111,14 @@ struct DigestCard: View {
             VStack(spacing: 0) {
                 if let andrewID = digest.mostHelpfulAndrewID,
                    let student = store.student(andrewID: andrewID) {
-                    pullout(label: "Most helpful",
+                    pullout(label: "Peer spotlight",
                             name: student.fullName,
                             initials: student.initials,
                             note: digest.mostHelpfulNote)
                     WovenRule()
                 }
                 if let organizer = digest.topOrganizer {
-                    pullout(label: "Best organiser",
+                    pullout(label: "Organizer spotlight",
                             name: organizer,
                             initials: initials(of: organizer),
                             note: digest.topOrganizerNote)

@@ -15,8 +15,7 @@ struct LedgerEntry: Identifiable, Hashable {
     }
 
     let id: UUID
-    /// Signed against the wallet. Giving spends allowance, not wallet, so a
-    /// `.given` entry carries a delta of 0 and is shown for history only.
+    /// Signed wallet movement. Giving also reduces the monthly allowance.
     let delta: Int
     let allowanceDelta: Int
     let title: String

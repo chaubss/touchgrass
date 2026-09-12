@@ -113,7 +113,7 @@ struct HomeView: View {
             Button { showGiveSheet = true } label: {
                 actionLabel("Give karma", subtitle: "Make someone's day", symbol: "heart", isPrimary: true)
             }
-                .disabled(store.currentUser.allowanceRemaining < KarmaRules.minGrant)
+                .disabled(!store.canAfford(amount: KarmaRules.minGrant))
 
             Button(action: onEarnKarma) {
                 actionLabel("Earn karma", subtitle: "Find your next event", symbol: "arrow.up.right", isPrimary: false)
@@ -215,19 +215,19 @@ struct AllowanceExplainer: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Two balances, on purpose")
+            Text("How giving works")
                 .font(.sectionTitle)
                 .foregroundStyle(Palette.ink)
 
-            Text("Your balance is karma you've been given, plus whatever you've earned at events. It's yours to spend in Redeem.")
+            Text("Your balance is karma you've received or earned at events. Giving karma transfers it from your balance to another student. You can also spend your balance in Redeem.")
                 .font(.uiBody)
                 .foregroundStyle(Palette.ink)
 
-            Text("Your allowance is separate. It's \(KarmaRules.monthlyAllowance) karma a month to hand out to other people, and it resets on the first. Giving it away costs you nothing from your own balance — so there's never a reason to hold back on recognising someone.")
+            Text("You can give up to \(KarmaRules.monthlyAllowance) karma each month, with a limit of \(KarmaRules.maxGrant) per recognition. Each gift reduces both your balance and your remaining monthly allowance. You can never give more than you have.")
                 .font(.uiBody)
                 .foregroundStyle(Palette.ink)
 
-            Text("Unspent allowance doesn't roll over.")
+            Text("The giving allowance resets on the first of each month and doesn't roll over. Resetting it doesn't add karma to your balance.")
                 .font(.uiLabel)
                 .foregroundStyle(Palette.ash)
 

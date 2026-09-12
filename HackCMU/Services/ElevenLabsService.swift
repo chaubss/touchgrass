@@ -9,7 +9,7 @@ import AVFoundation
 /// Text-to-speech for the reason box. Falls back to `SystemSpeechService`
 /// on any failure, same shape as `AnthropicSummaryService`.
 final class ElevenLabsSpeechService: NSObject, SpeechService, AVAudioPlayerDelegate {
-    var apiKey: String? = Bundle.main.object(forInfoDictionaryKey: "ELEVENLABS_API_KEY") as? String
+    var apiKey: String? = ElevenLabsConfiguration.configuredKey
     /// ElevenLabs' default pre-made voice ("Rachel"). Swap for any voice ID
     /// from the account the key belongs to.
     var voiceID = "21m00Tcm4TlvDq8ikWAM"
@@ -71,26 +71,35 @@ final class ElevenLabsSpeechService: NSObject, SpeechService, AVAudioPlayerDeleg
 /// to ElevenLabs' Scribe model for transcription.
 final class ElevenLabsDictationService: NSObject {
     enum DictationError: LocalizedError {
-        case notConfigured, noRecording, requestFailed
+        case notConfigured, noRecording, requestFailed, microphoneDenied, emptyTranscript
 
         var errorDescription: String? {
             switch self {
             case .notConfigured:
-                return "Add an ElevenLabs API key in Info.plist to transcribe recordings."
+                return "Add your API key in ElevenLabsConfiguration.swift to enable dictation."
             case .noRecording:
                 return "Nothing was recorded."
             case .requestFailed:
                 return "ElevenLabs couldn't transcribe that. Try again."
+            case .microphoneDenied:
+                return "Microphone access is off. Enable it in Settings, or type your reason."
+            case .emptyTranscript:
+                return "No speech was detected. Try again or type your reason."
             }
         }
     }
 
-    var apiKey: String? = Bundle.main.object(forInfoDictionaryKey: "ELEVENLABS_API_KEY") as? String
+    var apiKey: String? = ElevenLabsConfiguration.configuredKey
 
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
 
-    func startRecording() throws {
+    func startRecording() async throws {
+        guard let apiKey, !apiKey.isEmpty else { throw DictationError.notConfigured }
+        let granted = await AVAudioApplication.requestRecordPermission()
+        try Task.checkCancellation()
+        guard granted else { throw DictationError.microphoneDenied }
+        cancelRecording()
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .default)
         try session.setActive(true)
@@ -102,23 +111,38 @@ final class ElevenLabsDictationService: NSObject {
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
-        let recorder = try AVAudioRecorder(url: url, settings: settings)
-        recorder.record()
-        self.recorder = recorder
         self.recordingURL = url
+        do {
+            let recorder = try AVAudioRecorder(url: url, settings: settings)
+            guard recorder.record() else { throw DictationError.noRecording }
+            self.recorder = recorder
+        } catch {
+            cancelRecording()
+            throw error
+        }
+    }
+
+    func cancelRecording() {
+        recorder?.stop()
+        recorder = nil
+        if let recordingURL { try? FileManager.default.removeItem(at: recordingURL) }
+        recordingURL = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     /// Stops recording and transcribes it. Throws `.notConfigured` when no
     /// key is set yet — callers should show that as a toast, not an error.
     func stopRecordingAndTranscribe() async throws -> String {
         recorder?.stop()
+        recorder = nil
         try? AVAudioSession.sharedInstance().setActive(false)
-
-        guard let apiKey, !apiKey.isEmpty else { throw DictationError.notConfigured }
         guard let recordingURL else { throw DictationError.noRecording }
+        self.recordingURL = nil
+        defer { try? FileManager.default.removeItem(at: recordingURL) }
+        guard let apiKey, !apiKey.isEmpty else { throw DictationError.notConfigured }
 
         let audioData = try Data(contentsOf: recordingURL)
-        try? FileManager.default.removeItem(at: recordingURL)
+        guard !audioData.isEmpty else { throw DictationError.noRecording }
 
         let boundary = UUID().uuidString
         var request = URLRequest(url: URL(string: "https://api.elevenlabs.io/v1/speech-to-text")!)
@@ -130,7 +154,8 @@ final class ElevenLabsDictationService: NSObject {
         var body = Data()
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"model_id\"\r\n\r\n".data(using: .utf8)!)
-        body.append("scribe_v1\r\n".data(using: .utf8)!)
+        body.append("scribe_v2\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)\r\nContent-Disposition: form-data; name=\"tag_audio_events\"\r\n\r\nfalse\r\n".data(using: .utf8)!)
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"reason.m4a\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: audio/m4a\r\n\r\n".data(using: .utf8)!)
@@ -139,12 +164,15 @@ final class ElevenLabsDictationService: NSObject {
         request.httpBody = body
 
         let (data, response) = try await URLSession.shared.data(for: request)
+        try Task.checkCancellation()
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw DictationError.requestFailed
         }
 
         struct Payload: Decodable { let text: String }
         let payload = try JSONDecoder().decode(Payload.self, from: data)
-        return payload.text
+        let text = payload.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw DictationError.emptyTranscript }
+        return text
     }
 }

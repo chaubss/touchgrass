@@ -5,10 +5,8 @@ struct KarmaApp: App {
     @State private var store = KarmaStore.demo()
     @State private var locations = LocationManager()
 
-    /// Swap point for the digest text. Replace with AnthropicSummaryService()
-    /// (ANTHROPIC_API_KEY) or XAISummaryService() (XAI_API_KEY) in Info.plist
-    /// to generate against a live model.
-    private let summaries: AISummaryService = SampleSummaryService()
+    /// Local by default; IFMConfiguration.isEnabled opts into network generation.
+    private let summaries: AISummaryService = IFMConfiguration.summaryService()
 
     /// Swap point for the digest read-aloud button in Explore. Replace with
     /// XAIVoiceService() and add XAI_API_KEY to Info.plist once xAI's voice

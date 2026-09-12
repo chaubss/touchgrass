@@ -31,6 +31,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     /// Called when the map first appears, not at launch.
     func requestIfNeeded() {
+        status = manager.authorizationStatus
         switch status {
         case .notDetermined: manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways: manager.startUpdatingLocation()
@@ -52,10 +53,14 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         status = manager.authorizationStatus
         if isAuthorized { manager.startUpdatingLocation() }
+        else if isDenied {
+            manager.stopUpdatingLocation()
+            location = nil
+        }
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let latest = locations.last else { return }
+        guard let latest = locations.last, latest.horizontalAccuracy >= 0 else { return }
         location = latest
     }
 

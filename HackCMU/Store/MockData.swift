@@ -189,7 +189,7 @@ extension KarmaStore {
         for grant in grants where grant.from == harsh.id || grant.to == harsh.id {
             let received = grant.to == harsh.id
             let peer = students.first { $0.id == (received ? grant.from : grant.to) }!
-            ledger.append(.init(delta: received ? grant.amount : 0,
+            ledger.append(.init(delta: received ? grant.amount : -grant.amount,
                                 allowanceDelta: received ? 0 : -grant.amount,
                                 title: received ? "\(peer.fullName) recognised you" : "You recognised \(peer.fullName)",
                                 subtitle: grant.reason, date: grant.createdAt,

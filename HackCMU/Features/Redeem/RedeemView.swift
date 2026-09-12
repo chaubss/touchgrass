@@ -42,7 +42,7 @@ struct RedeemView: View {
                 .font(.uiLabel)
                 .foregroundStyle(Palette.ash)
             KarmaAmountText(value: store.currentUser.wallet, size: 34)
-            Text("Earned karma only. Your monthly giving allowance stays separate.")
+            Text("Your available karma, after gifts and redemptions.")
                 .font(.uiCaption)
                 .foregroundStyle(Palette.ash)
                 .padding(.top, 2)

@@ -254,6 +254,8 @@
 				DEVELOPMENT_TEAM = P773Z36HNN;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Karma records your spoken reason and sends it to ElevenLabs to turn it into editable text.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Karma uses your location to show your blue dot on the campus map and your distance from events.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -286,6 +288,8 @@
 				DEVELOPMENT_TEAM = P773Z36HNN;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Karma records your spoken reason and sends it to ElevenLabs to turn it into editable text.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Karma uses your location to show your blue dot on the campus map and your distance from events.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

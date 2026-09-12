@@ -91,7 +91,7 @@ final class KarmaStore {
     }
 
     func canAfford(amount: Int) -> Bool {
-        amount <= currentUser.allowanceRemaining
+        amount > 0 && amount <= currentUser.allowanceRemaining && amount <= currentUser.wallet
     }
 
     @discardableResult
@@ -108,11 +108,14 @@ final class KarmaStore {
                                isPublic: isPublic, createdAt: Date())
         grants.insert(grant, at: 0)
 
-        mutate(currentUserID) { $0.allowanceRemaining -= amount }
+        mutate(currentUserID) {
+            $0.allowanceRemaining -= amount
+            $0.wallet -= amount
+        }
         mutate(recipient) { $0.wallet += amount }
 
         ledger.insert(
-            LedgerEntry(delta: 0, allowanceDelta: -amount,
+            LedgerEntry(delta: -amount, allowanceDelta: -amount,
                         title: "You recognised \(name(recipient))",
                         subtitle: reason, date: grant.createdAt, kind: .given),
             at: 0
@@ -245,19 +248,23 @@ final class KarmaStore {
     }
 
     func digestContext() -> DigestContext {
-        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
-        let recentGrants = grants.filter { $0.createdAt > cutoff }.prefix(30).map {
+        let now = Date()
+        let cutoff = now.addingTimeInterval(-7 * 24 * 3600)
+        let recentGrants = grants.filter { $0.isPublic && $0.createdAt > cutoff && $0.createdAt <= now }
+            .sorted { $0.createdAt > $1.createdAt }.prefix(30).map {
             DigestContext.GrantLine(from: name($0.from), to: name($0.to),
                                     amount: $0.amount, category: $0.category.rawValue,
-                                    reason: $0.reason)
+                                    reason: String($0.reason.prefix(600)),
+                                    toAndrewID: student($0.to)?.andrewID ?? "")
         }
-        let recentEvents = events.filter { $0.start > cutoff && $0.start < Date() }.prefix(10).map {
+        let recentEvents = events.filter { $0.start > cutoff && $0.start < now }
+            .sorted { $0.start > $1.start }.prefix(10).map {
             DigestContext.EventLine(title: $0.title, organizer: $0.organizer,
                                     attending: $0.attending, capacity: $0.capacity,
                                     karma: $0.karmaReward)
         }
         return DigestContext(
-            weekOf: Date().formatted(.dateTime.month(.wide).day()),
+            weekOf: "\(cutoff.formatted(.iso8601.year().month().day())) through \(now.formatted(.iso8601.year().month().day())) (last seven days)",
             grants: Array(recentGrants),
             events: Array(recentEvents)
         )

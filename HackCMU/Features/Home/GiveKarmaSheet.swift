@@ -19,6 +19,9 @@ struct GiveKarmaSheet: View {
     @State private var dictation = ElevenLabsDictationService()
     @State private var speech: SpeechService = ElevenLabsSpeechService()
     @State private var isRecording = false
+    @State private var isTranscribing = false
+    @State private var isStartingRecording = false
+    @State private var dictationTask: Task<Void, Never>?
     @State private var isSpeaking = false
     @State private var toast: Toast?
 
@@ -44,6 +47,7 @@ struct GiveKarmaSheet: View {
             && block == nil
             && store.canAfford(amount: amount)
             && KarmaRules.reasonRange.contains(trimmedReason.count)
+            && !isRecording && !isTranscribing && !isStartingRecording
     }
 
     var body: some View {
@@ -75,6 +79,7 @@ struct GiveKarmaSheet: View {
             .safeAreaInset(edge: .bottom) { confirmBar }
             .toast($toast)
         }
+        .onDisappear { cancelDictation(); speech.stop() }
     }
 
     // MARK: - Sections
@@ -96,6 +101,7 @@ struct GiveKarmaSheet: View {
                     }
                     Spacer()
                     Button("Change") {
+                        cancelDictation()
                         withAnimation(.easeOut(duration: 0.2)) { self.recipient = nil }
                     }
                     .font(.uiLabel)
@@ -162,6 +168,9 @@ struct GiveKarmaSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeader(title: "How much",
                           trailing: "\(store.currentUser.allowanceRemaining) left this month")
+            Text("Gifts come from your balance of \(store.currentUser.wallet.formatted()) karma.")
+                .font(.uiCaption)
+                .foregroundStyle(Palette.ash)
 
             HStack(spacing: 8) {
                 ForEach(KarmaRules.quickAmounts, id: \.self) { value in
@@ -188,7 +197,9 @@ struct GiveKarmaSheet: View {
             }
 
             if !store.canAfford(amount: amount) {
-                Text("That's more than your allowance. You have \(store.currentUser.allowanceRemaining) left.")
+                Text(amount > store.currentUser.wallet
+                     ? "You have \(store.currentUser.wallet.formatted()) karma in your balance. Choose a smaller amount."
+                     : "You can give \(store.currentUser.allowanceRemaining.formatted()) more karma this month.")
                     .font(.uiCaption)
                     .foregroundStyle(Palette.tartan)
             }
@@ -240,6 +251,7 @@ struct GiveKarmaSheet: View {
                         reason = String(new.prefix(KarmaRules.reasonRange.upperBound))
                     }
                 }
+                .disabled(isTranscribing)
 
             if !trimmedReason.isEmpty && trimmedReason.count < KarmaRules.reasonRange.lowerBound {
                 Text("A few more words — at least \(KarmaRules.reasonRange.lowerBound) characters.")
@@ -249,35 +261,52 @@ struct GiveKarmaSheet: View {
 
             HStack(spacing: 16) {
                 Button(action: toggleDictation) {
-                    Label(isRecording ? "Stop" : "Dictate",
+                    Label(isTranscribing ? "Transcribing…" : (isStartingRecording ? "Starting…" : (isRecording ? "Stop & transcribe" : "Dictate")),
                           systemImage: isRecording ? "waveform.circle.fill" : "mic")
                 }
                 .foregroundStyle(isRecording ? Palette.tartan : Palette.ash)
+                .disabled(isTranscribing || isStartingRecording)
 
                 Button(action: toggleReadBack) {
                     Label(isSpeaking ? "Stop" : "Read back",
                           systemImage: isSpeaking ? "speaker.wave.2.fill" : "speaker.wave.2")
                 }
                 .foregroundStyle(isSpeaking ? Palette.tartan : Palette.ash)
-                .disabled(trimmedReason.isEmpty)
+                .disabled(trimmedReason.isEmpty || isRecording || isTranscribing || isStartingRecording)
 
                 Spacer()
 
-                Text("via ElevenLabs")
-                    .font(.uiCaption)
-                    .foregroundStyle(Palette.ash.opacity(0.7))
             }
             .font(.uiCaption.weight(.semibold))
             .buttonStyle(.plain)
+
+            Label("Powered by ElevenLabs", systemImage: "waveform")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Palette.tartan)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Palette.rule.opacity(0.6)))
+
+            if isRecording || isTranscribing {
+                Button("Cancel recording", action: cancelDictation)
+                    .font(.uiCaption)
+                    .foregroundStyle(Palette.ash)
+            }
+            Text("Dictation sends audio to ElevenLabs. Review the text before giving karma.")
+                .font(.uiCaption)
+                .foregroundStyle(Palette.ash)
         }
     }
 
     private func toggleDictation() {
         if isRecording {
             isRecording = false
-            Task {
+            isTranscribing = true
+            dictationTask = Task {
+                defer { isTranscribing = false }
                 do {
                     let transcript = try await dictation.stopRecordingAndTranscribe()
+                    try Task.checkCancellation()
                     let combined = [trimmedReason, transcript]
                         .filter { !$0.isEmpty }
                         .joined(separator: " ")
@@ -285,17 +314,32 @@ struct GiveKarmaSheet: View {
                         reason = String(combined.prefix(KarmaRules.reasonRange.upperBound))
                     }
                 } catch {
+                    guard !Task.isCancelled else { return }
                     toast = Toast(message: error.localizedDescription, symbol: "exclamationmark.triangle")
                 }
             }
         } else {
-            do {
-                try dictation.startRecording()
-                isRecording = true
-            } catch {
-                toast = Toast(message: "Couldn't access the microphone.", symbol: "exclamationmark.triangle")
+            speech.stop()
+            isSpeaking = false
+            isStartingRecording = true
+            dictationTask = Task {
+                defer { isStartingRecording = false }
+                do {
+                    try await dictation.startRecording()
+                    isRecording = true
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    toast = Toast(message: error.localizedDescription, symbol: "exclamationmark.triangle")
+                }
             }
         }
+    }
+
+    private func cancelDictation() {
+        dictationTask?.cancel()
+        dictation.cancelRecording()
+        isRecording = false
+        // Async work clears its own busy state after observing cancellation.
     }
 
     private func toggleReadBack() {
